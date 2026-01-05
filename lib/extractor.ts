@@ -288,10 +288,10 @@ async function processMultipleBatches(
     ticketCount: allTickets.length,
     faqs: batchResults.flatMap((r) => r.faqs),
     issuesResolutions: batchResults.flatMap((r) => r.issuesResolutions),
-    frictionPoints: [...new Set(batchResults.flatMap((r) => r.frictionPoints))],
+    frictionPoints: Array.from(new Set(batchResults.flatMap((r) => r.frictionPoints))),
     responseTemplates: batchResults.flatMap((r) => r.responseTemplates),
-    escalationTriggers: [...new Set(batchResults.flatMap((r) => r.escalationTriggers))],
-    featureRequests: [...new Set(batchResults.flatMap((r) => r.featureRequests))],
+    escalationTriggers: Array.from(new Set(batchResults.flatMap((r) => r.escalationTriggers))),
+    featureRequests: Array.from(new Set(batchResults.flatMap((r) => r.featureRequests))),
   };
 
   // Save merged guide

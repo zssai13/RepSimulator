@@ -348,7 +348,8 @@ const SupportGuidePDF: React.FC<SupportGuidePDFProps> = ({ guide }) => {
  */
 export async function generateSalesPlaybookPDF(playbook: SalesPlaybook): Promise<Buffer> {
   const doc = React.createElement(SalesPlaybookPDF, { playbook });
-  return await renderToBuffer(doc);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return await renderToBuffer(doc as any);
 }
 
 /**
@@ -356,7 +357,8 @@ export async function generateSalesPlaybookPDF(playbook: SalesPlaybook): Promise
  */
 export async function generateSupportGuidePDF(guide: SupportGuide): Promise<Buffer> {
   const doc = React.createElement(SupportGuidePDF, { guide });
-  return await renderToBuffer(doc);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return await renderToBuffer(doc as any);
 }
 
 

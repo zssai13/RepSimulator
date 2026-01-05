@@ -17,13 +17,14 @@ export default function Home() {
     initialMessage: '',
     pageContext: '',
     goal: '',
+    modelId: '',
   });
 
   // Keyboard shortcuts
   const handleClear = useCallback(() => {
     setMessages([]);
     setIsSimulationActive(false);
-    setConfig({ initialMessage: '', pageContext: '', goal: '' });
+    setConfig({ initialMessage: '', pageContext: '', goal: '', modelId: '' });
     toast.success('Conversation cleared');
   }, []);
 
@@ -46,6 +47,7 @@ export default function Home() {
     initialMessage: string;
     pageContext: string;
     goal: string;
+    modelId: string;
   }) => {
     setConfig(newConfig);
     setIsSimulationActive(true);
@@ -88,6 +90,7 @@ export default function Home() {
           initialMessage: config.initialMessage,
           pageContext: config.pageContext,
           goal: config.goal,
+          modelId: config.modelId,
         }),
       });
 

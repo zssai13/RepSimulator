@@ -41,7 +41,7 @@ export default function ChatWindow({ messages, isLoading }: ChatWindowProps) {
             No conversation yet
           </h3>
           <p className="text-sm text-slate-500">
-            Configure your simulation settings above and click "Start Simulation"
+            Configure your simulation settings above and click &quot;Start Simulation&quot;
           </p>
         </div>
       </div>

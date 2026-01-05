@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { BucketType, BucketStatus } from '@/types';
+import { DEFAULT_MODEL } from '@/config/agent-config';
 
 // ============================================
 // KNOWLEDGE STORE
@@ -186,5 +187,24 @@ export const getBucketConfig = (type: BucketType): BucketConfig => {
   if (!config) throw new Error(`Unknown bucket type: ${type}`);
   return config;
 };
+
+// ============================================
+// MODEL SELECTION STORE
+// ============================================
+// Manages the selected model for chat
+// ============================================
+
+interface ModelState {
+  selectedModelId: string;
+  setSelectedModelId: (modelId: string) => void;
+}
+
+export const useModelStore = create<ModelState>((set) => ({
+  selectedModelId: DEFAULT_MODEL,
+
+  setSelectedModelId: (modelId) => {
+    set({ selectedModelId: modelId });
+  },
+}));
 
 

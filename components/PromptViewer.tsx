@@ -15,7 +15,7 @@ export default function PromptViewer({ config }: PromptViewerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'system' | 'config'>('system');
 
-  const { systemPrompt, agentConfig } = debugGetFullPrompt({
+  const { systemPrompt } = debugGetFullPrompt({
     ...config,
     knowledgeContext: '(Knowledge will be loaded from RAG and playbooks when available)',
   });

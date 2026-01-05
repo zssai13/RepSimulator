@@ -76,6 +76,7 @@ export function getAgentConfig() {
  * Will be implemented in Step 6 (RAG) and Step 7-8 (Playbooks)
  */
 export async function loadKnowledgeContext(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _query: string
 ): Promise<string | undefined> {
   // TODO: Step 6 - Query LanceDB for relevant website/docs chunks

@@ -29,6 +29,7 @@ interface DocumentRecord {
   source: string;
   chunkIndex: number;
   vector: number[];
+  [key: string]: unknown; // Index signature for LanceDB compatibility
 }
 
 // Connection cache

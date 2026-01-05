@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 import { agentConfig } from '@/config/agent-config';
 import { buildSystemPrompt, formatMessagesForClaude } from '@/lib/llm';
 import { Message } from '@/types';
 import { queryAllTables } from '@/lib/vectorstore';
 import { loadSalesPlaybook, loadSupportGuide } from '@/lib/extractor';
-
-// Initialize Anthropic client
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+import {
+  getProviderForModel,
+  hasAnyProvider,
+  AVAILABLE_MODELS
+} from '@/lib/providers';
 
 // Request body type
 interface ChatRequestBody {
@@ -17,6 +16,7 @@ interface ChatRequestBody {
   initialMessage: string;
   pageContext: string;
   goal: string;
+  modelId?: string; // Optional model selection
 }
 
 // Track which knowledge sources are used
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     // Parse request body
     const body: ChatRequestBody = await request.json();
-    const { messages, initialMessage, pageContext, goal } = body;
+    const { messages, initialMessage, pageContext, goal, modelId } = body;
 
     // Validate required fields
     if (!messages || !Array.isArray(messages)) {
@@ -40,7 +40,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Format messages for Claude API
+    // Check if any provider is configured
+    if (!hasAnyProvider()) {
+      return NextResponse.json(
+        { error: 'No LLM provider configured. Please add ANTHROPIC_API_KEY or XAI_API_KEY to your environment.' },
+        { status: 500 }
+      );
+    }
+
+    // Determine which model to use
+    const selectedModelId = modelId || agentConfig.model;
+
+    // Validate model exists
+    const modelConfig = AVAILABLE_MODELS.find((m) => m.id === selectedModelId);
+    if (!modelConfig) {
+      return NextResponse.json(
+        { error: `Unknown model: ${selectedModelId}` },
+        { status: 400 }
+      );
+    }
+
+    // Get the provider for this model
+    const provider = getProviderForModel(selectedModelId);
+
+    // Check if provider is configured
+    if (!provider.isConfigured()) {
+      return NextResponse.json(
+        { error: `Provider ${modelConfig.provider} is not configured. Please add the API key.` },
+        { status: 500 }
+      );
+    }
+
+    // Format messages for the provider
     const formattedMessages = formatMessagesForClaude(messages);
 
     // Ensure we have at least one message
@@ -68,12 +99,12 @@ export async function POST(request: NextRequest) {
     if (process.env.OPENAI_API_KEY && latestUserMessage) {
       try {
         const ragResults = await queryAllTables(latestUserMessage, 5);
-        
+
         if (ragResults.length > 0) {
           const ragContext = ragResults
             .map((r, i) => `[${i + 1}] From ${r.source} (${r.table}):\n${r.text}`)
             .join('\n\n');
-          
+
           knowledgeParts.push(`=== RETRIEVED FROM WEBSITE/DOCS ===\n${ragContext}`);
           sources.rag = true;
           console.log(`RAG: Found ${ragResults.length} relevant chunks`);
@@ -110,8 +141,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Combine all knowledge
-    const knowledgeContext = knowledgeParts.length > 0 
-      ? knowledgeParts.join('\n\n---\n\n') 
+    const knowledgeContext = knowledgeParts.length > 0
+      ? knowledgeParts.join('\n\n---\n\n')
       : undefined;
 
     // Build the system prompt with all context
@@ -122,37 +153,37 @@ export async function POST(request: NextRequest) {
       knowledgeContext,
     });
 
-    // Call Claude API
-    const response = await anthropic.messages.create({
-      model: agentConfig.model,
-      max_tokens: agentConfig.maxTokens,
-      system: systemPrompt,
-      messages: formattedMessages,
-    });
+    // Call the provider
+    console.log(`Using model: ${selectedModelId} (${modelConfig.provider})`);
 
-    // Extract the text response
-    const textContent = response.content.find((block) => block.type === 'text');
-    const assistantMessage = textContent?.type === 'text' ? textContent.text : '';
+    const response = await provider.chat({
+      messages: formattedMessages,
+      systemPrompt,
+      maxTokens: agentConfig.maxTokens,
+      temperature: agentConfig.temperature,
+    });
 
     // Return the response with knowledge source info
     return NextResponse.json({
-      message: assistantMessage,
+      message: response.content,
       usage: response.usage,
       knowledgeSources: sources,
+      model: selectedModelId,
     });
 
   } catch (error) {
     console.error('Chat API Error:', error);
 
     // Handle specific error types
-    if (error instanceof Anthropic.APIError) {
-      if (error.status === 401) {
+    if (error instanceof Error) {
+      // Check for API errors
+      if (error.message.includes('401') || error.message.includes('Unauthorized')) {
         return NextResponse.json(
-          { error: 'Invalid API key. Please check your ANTHROPIC_API_KEY.' },
+          { error: 'Invalid API key. Please check your API key configuration.' },
           { status: 401 }
         );
       }
-      if (error.status === 429) {
+      if (error.message.includes('429') || error.message.includes('rate')) {
         return NextResponse.json(
           { error: 'Rate limit exceeded. Please try again in a moment.' },
           { status: 429 }
@@ -160,7 +191,7 @@ export async function POST(request: NextRequest) {
       }
       return NextResponse.json(
         { error: `API Error: ${error.message}` },
-        { status: error.status || 500 }
+        { status: 500 }
       );
     }
 

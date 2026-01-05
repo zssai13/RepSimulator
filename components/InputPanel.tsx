@@ -1,12 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useModelStore } from '@/lib/store';
+
+interface ModelOption {
+  id: string;
+  name: string;
+  provider: string;
+  description?: string;
+}
 
 interface InputPanelProps {
   onStart: (config: {
     initialMessage: string;
     pageContext: string;
     goal: string;
+    modelId: string;
   }) => void;
   disabled?: boolean;
 }
@@ -18,6 +27,37 @@ export default function InputPanel({ onStart, disabled = false }: InputPanelProp
   const [initialMessage, setInitialMessage] = useState('');
   const [pageContext, setPageContext] = useState('');
   const [goal, setGoal] = useState('');
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+
+  const { selectedModelId, setSelectedModelId } = useModelStore();
+
+  // Fetch available models on mount
+  useEffect(() => {
+    async function fetchModels() {
+      try {
+        const response = await fetch('/api/models');
+        const data = await response.json();
+        setAvailableModels(data.models || []);
+
+        // If current selection is not available, select first available
+        if (data.models?.length > 0) {
+          const isCurrentValid = data.models.some(
+            (m: ModelOption) => m.id === selectedModelId
+          );
+          if (!isCurrentValid) {
+            setSelectedModelId(data.models[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch models:', error);
+      } finally {
+        setIsLoadingModels(false);
+      }
+    }
+
+    fetchModels();
+  }, [selectedModelId, setSelectedModelId]);
 
   const handleStart = () => {
     if (initialMessage.trim()) {
@@ -25,7 +65,20 @@ export default function InputPanel({ onStart, disabled = false }: InputPanelProp
         initialMessage: initialMessage.trim(),
         pageContext: pageContext.trim(),
         goal: goal.trim() || DEFAULT_GOAL,
+        modelId: selectedModelId,
       });
+    }
+  };
+
+  // Get provider label for display
+  const getProviderLabel = (provider: string) => {
+    switch (provider) {
+      case 'anthropic':
+        return 'Claude';
+      case 'xai':
+        return 'Grok';
+      default:
+        return provider;
     }
   };
 
@@ -40,6 +93,38 @@ export default function InputPanel({ onStart, disabled = false }: InputPanelProp
       </h3>
 
       <div className="space-y-4">
+        {/* Model Selection */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            AI Model
+          </label>
+          {isLoadingModels ? (
+            <div className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-400">
+              Loading models...
+            </div>
+          ) : availableModels.length === 0 ? (
+            <div className="w-full px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+              No models available. Please configure API keys.
+            </div>
+          ) : (
+            <select
+              value={selectedModelId}
+              onChange={(e) => setSelectedModelId(e.target.value)}
+              disabled={disabled}
+              className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 disabled:bg-slate-100 disabled:cursor-not-allowed focus:border-blue-400 transition-colors cursor-pointer"
+            >
+              {availableModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {getProviderLabel(model.provider)}: {model.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <p className="text-xs text-slate-400 mt-1">
+            Select which AI model to use for responses
+          </p>
+        </div>
+
         {/* Initial AI Message */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -94,7 +179,7 @@ export default function InputPanel({ onStart, disabled = false }: InputPanelProp
         {/* Start Button */}
         <button
           onClick={handleStart}
-          disabled={disabled || !initialMessage.trim()}
+          disabled={disabled || !initialMessage.trim() || availableModels.length === 0}
           className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium text-sm hover:from-blue-700 hover:to-purple-700 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
         >
           Start Simulation
@@ -103,4 +188,3 @@ export default function InputPanel({ onStart, disabled = false }: InputPanelProp
     </div>
   );
 }
-
