@@ -3,7 +3,7 @@
 ## Overview
 
 **Product Name:** AI Sales Rep Simulator
-**Version:** MVP
+**Version:** 1.1
 **Last Updated:** January 2026
 **Status:** Internal Testing Tool
 
@@ -139,16 +139,32 @@ This field is key for testing different scenarios - you can see how the agent be
 - Agent config display (model, temperature, tokens)
 - Export conversation as JSON
 
+### Model Selection
+Users can choose which LLM powers the agent responses:
+
+| Model | Provider | Description |
+|-------|----------|-------------|
+| **Claude Sonnet 4** | Anthropic | Balanced performance and speed (default) |
+| **Grok 4.1 Fast** | xAI | Fast reasoning model |
+
+**How it works:**
+- Dropdown in Settings panel allows switching models
+- Selection persists during session
+- Each provider requires its own API key
+- Model choice affects response style and capabilities
+
 ---
 
 ## Technical Requirements
 
 ### API Keys Required
-- `ANTHROPIC_API_KEY` - For chat responses and extraction
-- `OPENAI_API_KEY` - For embeddings (RAG)
+- `ANTHROPIC_API_KEY` - For Claude chat responses and extraction
+- `XAI_API_KEY` - For Grok chat responses (alternative to Claude)
+- `OPENAI_API_KEY` - For embeddings (RAG) - always required
 
 ### Models Used
-- **Chat:** Claude Sonnet (claude-sonnet-4-20250514)
+- **Chat:** Claude Sonnet 4 or Grok 4.1 Fast (user-selectable)
+- **Extraction:** Claude Sonnet 4 (playbook generation)
 - **Embeddings:** OpenAI text-embedding-3-small
 
 ### Data Storage
@@ -185,7 +201,7 @@ These are potential enhancements, not current requirements:
 
 - Direct URL fetching for website/docs
 - Conversation history persistence
-- Multiple agent configurations for A/B testing
+- Additional LLM providers (OpenAI GPT-4, etc.)
 - Response quality scoring/analytics
 - Customer-facing version for self-service testing
 - Integration with production email system

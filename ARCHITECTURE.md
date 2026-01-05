@@ -1,6 +1,6 @@
 # Architecture Document: AI Sales Rep Simulator
 
-> **Version:** 1.0 (MVP)
+> **Version:** 1.1
 > **Last Updated:** January 2026
 
 ---
@@ -50,18 +50,18 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          SERVICES LAYER                              │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
-│  │    LLM      │  │ VectorStore │  │  Extractor  │  │     PDF     │ │
-│  │  (Claude)   │  │  (LanceDB)  │  │  (Claude)   │  │  Generator  │ │
+│  │  Provider   │  │ VectorStore │  │  Extractor  │  │     PDF     │ │
+│  │ Abstraction │  │  (LanceDB)  │  │  (Claude)   │  │  Generator  │ │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │
 └─────────────────────────────────────────────────────────────────────┘
           │                │
           ▼                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        EXTERNAL SERVICES                             │
-│  ┌─────────────────────────┐  ┌─────────────────────────────────┐   │
-│  │    Anthropic API        │  │         OpenAI API              │   │
-│  │    (Chat + Extraction)  │  │         (Embeddings)            │   │
-│  └─────────────────────────┘  └─────────────────────────────────┘   │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────────────┐    │
+│  │ Anthropic API │  │   xAI API     │  │      OpenAI API       │    │
+│  │   (Claude)    │  │   (Grok)      │  │     (Embeddings)      │    │
+│  └───────────────┘  └───────────────┘  └───────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────┘
           │                │
           ▼                ▼
@@ -87,20 +87,19 @@
 | **State** | Zustand | Lightweight state management |
 | **Vector DB** | LanceDB | Local vector storage and search |
 | **Embeddings** | OpenAI (text-embedding-3-small) | Text to vector conversion |
-| **LLM (Chat)** | Claude Sonnet | Conversation responses |
+| **LLM (Chat)** | Claude Sonnet 4 / Grok 4.1 Fast | Conversation responses (selectable) |
 | **LLM (Extraction)** | Claude Sonnet | Playbook extraction |
 | **PDF** | @react-pdf/renderer | Playbook PDF generation |
 
 ### Environment Variables
 
 ```bash
-# Required
-ANTHROPIC_API_KEY=sk-ant-...    # Chat responses + extraction
-OPENAI_API_KEY=sk-...           # Embeddings for RAG
+# Required (at least one chat provider)
+ANTHROPIC_API_KEY=sk-ant-...    # Claude chat + extraction
+XAI_API_KEY=xai-...             # Grok chat (alternative)
+OPENAI_API_KEY=sk-...           # Embeddings for RAG (required)
 
-# Future (not yet implemented)
-# MODEL_PROVIDER=anthropic|openai|custom
-# EMBEDDING_PROVIDER=openai|custom
+# Model selection is done via UI dropdown, no env config needed
 ```
 
 ---
@@ -112,7 +111,9 @@ RepSimulator/
 ├── app/                          # Next.js App Router
 │   ├── api/                      # API Routes
 │   │   ├── chat/
-│   │   │   └── route.ts          # Main chat endpoint
+│   │   │   └── route.ts          # Main chat endpoint (uses provider abstraction)
+│   │   ├── models/
+│   │   │   └── route.ts          # Available models endpoint
 │   │   ├── ingest/
 │   │   │   └── route.ts          # RAG document ingestion
 │   │   ├── extract/
@@ -138,10 +139,15 @@ RepSimulator/
 │   └── extraction-prompts.ts     # Playbook extraction prompts
 │
 ├── lib/                          # Core Libraries
+│   ├── providers/                # LLM Provider Abstraction
+│   │   ├── types.ts              # Provider interfaces, model definitions
+│   │   ├── anthropic.ts          # Claude (Anthropic) provider
+│   │   ├── xai.ts                # Grok (xAI) provider
+│   │   └── index.ts              # Provider factory/registry
 │   ├── extractor.ts              # Playbook extraction logic
 │   ├── llm.ts                    # LLM integration utilities
 │   ├── pdf-generator.ts          # PDF rendering
-│   ├── store.ts                  # Zustand state store
+│   ├── store.ts                  # Zustand state store (includes model selection)
 │   ├── text-chunker.ts           # Document chunking for RAG
 │   └── vectorstore.ts            # LanceDB operations
 │
@@ -233,9 +239,55 @@ User types message
 
 ## Core Modules
 
+### lib/providers/ - LLM Provider Abstraction
+
+**Purpose:** Unified interface for multiple LLM providers (Claude, Grok, etc.)
+
+```typescript
+// lib/providers/types.ts
+interface LLMProvider {
+  name: string;
+  chat(request: ChatRequest): Promise<ChatResponse>;
+  isConfigured(): boolean;
+}
+
+type ProviderType = 'anthropic' | 'xai';
+
+interface ModelOption {
+  id: string;
+  name: string;
+  provider: ProviderType;
+  description?: string;
+}
+
+// Available models
+AVAILABLE_MODELS = [
+  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic' },
+  { id: 'grok-4-1-fast', name: 'Grok 4.1 Fast', provider: 'xai' }
+]
+```
+
+**Provider Implementations:**
+| File | Provider | API |
+|------|----------|-----|
+| `anthropic.ts` | Anthropic | Claude API (native SDK) |
+| `xai.ts` | xAI | OpenAI-compatible (x.ai base URL) |
+
+**Usage in API Route:**
+```typescript
+// app/api/chat/route.ts
+import { getProvider, getModelById } from '@/lib/providers';
+
+const model = getModelById(modelId);
+const provider = getProvider(model.provider);
+const response = await provider.chat({ messages, systemPrompt });
+```
+
+---
+
 ### lib/llm.ts - LLM Integration
 
-**Purpose:** Handles all LLM-related operations and prompt building.
+**Purpose:** Handles prompt building and formatting utilities.
 
 ```typescript
 // Current exports
@@ -244,11 +296,6 @@ formatMessagesForClaude(messages)     // Converts Message[] to Claude format
 getAgentConfig()                      // Returns model settings
 debugGetFullPrompt()                  // For PromptViewer display
 ```
-
-**Extension Points:**
-- Add model provider abstraction
-- Support multiple LLM backends
-- Dynamic model selection per request
 
 ---
 
@@ -336,10 +383,10 @@ chunkDocuments(documents)             // Multiple documents
 
 ### lib/store.ts - State Management
 
-**Purpose:** Zustand store for UI state.
+**Purpose:** Zustand stores for UI state.
 
 ```typescript
-// State shape
+// Knowledge store
 interface KnowledgeState {
   buckets: Record<BucketType, BucketState>
   uploadFiles(bucketType, files)
@@ -349,13 +396,21 @@ interface KnowledgeState {
   clearAllBuckets()
 }
 
+// Model selection store
+interface ModelState {
+  selectedModelId: string
+  models: ModelOption[]
+  isLoading: boolean
+  setSelectedModel(modelId: string)
+  fetchModels()
+}
+
 // Bucket types
 type BucketType = 'website' | 'documentation' | 'transcripts' | 'tickets'
 ```
 
 **Extension Points:**
 - Add conversation history persistence
-- Model selection state
 - User preferences
 
 ---
@@ -479,7 +534,8 @@ export const agentConfig = {
   messages: Message[],
   initialMessage: string,
   pageContext: string,
-  goal: string
+  goal: string,
+  modelId: string    // e.g., "claude-sonnet-4-20250514" or "grok-4-1-fast"
 }
 ```
 
@@ -492,6 +548,23 @@ export const agentConfig = {
     salesPlaybook: boolean,
     supportGuide: boolean
   }
+}
+```
+
+---
+
+### GET /api/models
+
+**Response:**
+```typescript
+{
+  models: Array<{
+    id: string,
+    name: string,
+    provider: 'anthropic' | 'xai',
+    description?: string
+  }>,
+  defaultModelId: string
 }
 ```
 
@@ -596,24 +669,47 @@ This section documents where and how to add new features.
 
 ### Adding New Model Providers
 
-**Files to modify:**
-1. `config/agent-config.ts` - Add provider config
-2. `lib/llm.ts` - Add provider abstraction
-3. `app/api/chat/route.ts` - Use abstraction
+**Status:** ✅ Implemented
 
-**Proposed abstraction:**
+The provider abstraction is in `lib/providers/`. To add a new provider:
+
+**Files to modify:**
+1. `lib/providers/types.ts` - Add provider type and model(s) to `AVAILABLE_MODELS`
+2. Create `lib/providers/[provider].ts` - Implement `LLMProvider` interface
+3. `lib/providers/index.ts` - Register provider in `providers` map
+4. `.env.example` - Add API key placeholder
+
+**Example: Adding a new provider**
 ```typescript
-// lib/llm-providers/index.ts
-interface LLMProvider {
-  chat(messages: Message[], systemPrompt: string): Promise<string>
-  getConfig(): ModelConfig
+// lib/providers/newprovider.ts
+import { LLMProvider, ChatRequest, ChatResponse } from './types';
+
+export class NewProvider implements LLMProvider {
+  name = 'newprovider';
+
+  async chat(request: ChatRequest): Promise<ChatResponse> {
+    // Call provider API
+    return { content: response };
+  }
+
+  isConfigured(): boolean {
+    return !!process.env.NEW_PROVIDER_API_KEY;
+  }
 }
 
-// lib/llm-providers/anthropic.ts
-export class AnthropicProvider implements LLMProvider { ... }
+// lib/providers/index.ts - add to registry
+import { NewProvider } from './newprovider';
+const providers = {
+  anthropic: new AnthropicProvider(),
+  xai: new XAIProvider(),
+  newprovider: new NewProvider(),  // Add here
+};
 
-// lib/llm-providers/openai.ts
-export class OpenAIProvider implements LLMProvider { ... }
+// lib/providers/types.ts - add model
+export const AVAILABLE_MODELS: ModelOption[] = [
+  // ... existing models
+  { id: 'new-model-id', name: 'New Model', provider: 'newprovider' },
+];
 ```
 
 ---
@@ -638,20 +734,25 @@ export class OpenAIProvider implements LLMProvider { ... }
 
 ### Adding Model Selection UI
 
-**Files to modify:**
-1. `lib/store.ts` - Add model selection state
-2. `components/InputPanel.tsx` or new component - Add dropdown
-3. `app/api/chat/route.ts` - Accept model param
-4. `config/agent-config.ts` - Define available models
+**Status:** ✅ Implemented
 
-**Proposed state:**
+Model selection is now in the Settings panel (`components/InputPanel.tsx`).
+
+**Implementation details:**
+- `lib/store.ts` - `useModelStore` for model selection state
+- `components/InputPanel.tsx` - Dropdown in Settings section
+- `app/api/models/route.ts` - Returns available models
+- `app/api/chat/route.ts` - Accepts `modelId` parameter
+
+**Current state shape:**
 ```typescript
-// lib/store.ts addition
+// lib/store.ts
 interface ModelState {
-  selectedProvider: 'anthropic' | 'openai',
-  selectedModel: string,
-  availableModels: ModelOption[],
-  setModel(provider, model): void
+  selectedModelId: string;
+  models: ModelOption[];
+  isLoading: boolean;
+  setSelectedModel(modelId: string): void;
+  fetchModels(): Promise<void>;
 }
 ```
 
