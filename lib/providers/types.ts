@@ -50,8 +50,8 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     description: 'Balanced performance and speed',
   },
   {
-    id: 'grok-3-fast',
-    name: 'Grok 3 Fast',
+    id: 'grok-4-1-fast',
+    name: 'Grok 4.1 Fast',
     provider: 'xai',
     description: 'Fast reasoning model',
   },
